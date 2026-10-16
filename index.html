@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insurance IRR Calculator</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#18212b;background:#f3f7fb}
+*{box-sizing:border-box}body{margin:0;padding:16px}.app{max-width:760px;margin:auto}
+header{background:#078fc7;color:white;border-radius:18px;padding:22px 18px;margin-bottom:16px}
+h1{font-size:1.45rem;margin:0 0 6px}header p{margin:0;opacity:.95;font-size:.94rem}
+.card{background:white;border:1px solid #e0e7ee;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 3px 12px #17324d0a}
+h2{font-size:1.08rem;margin:0 0 14px}label{display:block;font-weight:650;font-size:.9rem;margin:0 0 6px}
+input,select{font:inherit;width:100%;padding:11px 12px;border:1px solid #c9d4df;border-radius:10px;background:white;color:#18212b}
+.field{margin-bottom:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 14px;cursor:pointer}
+.primary{background:#078fc7;color:white;width:100%}.secondary{background:#e7f5fb;color:#075b7d}.danger{background:#fff0f0;color:#a32222;padding:8px 10px}
+.row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin:10px 0}
+.result{background:#e9f8ff;border:1px solid #bdeafa;border-radius:14px;padding:16px;margin-top:14px}
+.big{font-size:2rem;font-weight:800;color:#006d99;line-height:1.2}.muted{color:#607080;font-size:.88rem}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{padding:9px 8px;border-bottom:1px solid #e5ebf0;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
+.note{font-size:.86rem;line-height:1.45;color:#536273}
+footer{font-size:.78rem;color:#667686;text-align:center;padding:12px}
+@media(max-width:480px){body{padding:10px}.grid{grid-template-columns:1fr 1fr;gap:9px}.card{padding:13px}.row{grid-template-columns:1fr 1fr auto}.income-row{grid-template-columns:1fr 1fr}.income-row .income-amount{grid-column:1 / 2}.income-row button{grid-column:2 / 3;grid-row:2}.big{font-size:1.7rem}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>Insurance IRR Calculator</h1>
+  <p>Estimate annualized return from premiums and policy benefits — works offline after saving this file.</p>
+</header>
+
+<section class="card">
+  <h2>1. Premium details</h2>
+  <div class="grid">
+    <div class="field"><label for="premium">Premium per payment (₹)</label><input id="premium" type="number" min="0" step="any" value="50000"></div>
+    <div class="field"><label for="payments">Number of premiums</label><input id="payments" type="number" min="1" max="100" step="1" value="8"></div>
+    <div class="field"><label for="start">First premium timing</label><select id="start"><option value="0">Year 0 (today)</option><option value="1">Year 1 (end of year)</option></select></div>
+    <div class="field"><label for="frequency">Premium frequency</label><select id="frequency"><option value="1">Annual</option><option value="0.5">Half-yearly (approx.)</option><option value="0.25">Quarterly (approx.)</option><option value="0.0833333333">Monthly (approx.)</option></select></div>
+  </div>
+  <p class="note">For the most reliable result, use annual premiums and annual policy-year cash flows. Non-annual frequency is approximated in the schedule.</p>
+</section>
+
+<section class="card">
+  <h2>2. Policy benefits / returns</h2>
+  <p class="note">Add every amount you expect to receive and the policy year in which it is paid. Include maturity, survival benefits, bonuses or other payouts as applicable.</p>
+  <div id="benefits"></div>
+  <button type="button" class="secondary" id="addBenefit">＋ Add benefit</button>
+</section>
+
+<section class="card">
+  <h2>3. Recurring income / cash flows</h2>
+  <p class="note">Use this for regular yearly income, such as survival benefits: enter the first year, last year, and amount received each year. Both end years are included.</p>
+  <div id="incomeStreams"></div>
+  <button type="button" class="secondary" id="addIncome">＋ Add income period</button>
+</section>
+
+<button type="button" class="primary" id="calculate">Calculate IRR</button>
+<div id="output" aria-live="polite"></div>
+
+<section class="card">
+  <h2>How to use</h2>
+  <ol class="note">
+    <li>Enter the premium amount and number of premium payments.</li>
+    <li>Add each benefit amount and the year it is received.</li>
+    <li>Tap <b>Calculate IRR</b> to see the estimated annualized return and cash-flow schedule.</li>
+  </ol>
+  <p class="note"><b>Important:</b> This is an estimate based only on the cash flows entered. It is not an insurer quote or a guarantee. Actual returns can differ due to dates, taxes, charges, bonuses and policy terms. For policies with irregular exact dates, use a date-based XIRR calculation.</p>
+</section>
+<footer>Private, local calculation — values stay in this browser page.</footer>
+</div>
+<script>
+const benefitsEl = document.getElementById('benefits');
+let benefitCount = 0;
+function addBenefit(year=20, amount=100000) {
+  benefitCount++;
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div><label>Benefit year</label><input class="benefit-year" type="number" min="0" max="100" step="1" value="${year}" aria-label="Benefit year"></div>
+  <div><label>Amount (₹)</label><input class="benefit-amount" type="number" min="0" step="any" value="${amount}" aria-label="Benefit amount"></div>
+  <button type="button" class="danger" aria-label="Remove benefit">✕</button>`;
+  row.querySelector('button').addEventListener('click',()=>{row.remove();});
+  benefitsEl.appendChild(row);
+}
+addBenefit(22,100000);
+addBenefit(30,250000);
+addBenefit(40,1000000);
+document.getElementById('addBenefit').addEventListener('click',()=>addBenefit(20,100000));
+
+const incomeStreamsEl = document.getElementById('incomeStreams');
+function addIncomeStream(fromYear=10, toYear=20, amount=25000) {
+  const row = document.createElement('div');
+  row.className = 'row income-row';
+  row.innerHTML = `<div><label>From year</label><input class="income-from" type="number" min="0" max="100" step="1" value="${fromYear}" aria-label="Income from year"></div>
+  <div><label>To year</label><input class="income-to" type="number" min="0" max="100" step="1" value="${toYear}" aria-label="Income to year"></div>
+  <div><label>Amount each year (₹)</label><input class="income-amount" type="number" min="0" step="any" value="${amount}" aria-label="Income amount each year"></div>
+  <button type="button" class="danger" aria-label="Remove income period">✕</button>`;
+  row.querySelector('button').addEventListener('click',()=>row.remove());
+  incomeStreamsEl.appendChild(row);
+}
+document.getElementById('addIncome').addEventListener('click',()=>addIncomeStream(10,20,25000));
+
+function money(n){return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(n);}
+function npv(rate, flows){return flows.reduce((sum,cf,t)=>sum+cf/Math.pow(1+rate,t),0);}
+function calculateIRR(flows){
+  if(!flows.some(x=>x<0) || !flows.some(x=>x>0)) return null;
+  let lo=-0.9999, hi=1;
+  let flo=npv(lo,flows), fhi=npv(hi,flows);
+  while(flo*fhi>0 && hi<1e6){hi=hi*2+1; fhi=npv(hi,flows);}
+  if(!Number.isFinite(flo)||!Number.isFinite(fhi)||flo*fhi>0) return null;
+  for(let i=0;i<250;i++){
+    const mid=(lo+hi)/2, fm=npv(mid,flows);
+    if(Math.abs(fm)<1e-7) return mid;
+    if(flo*fm<=0){hi=mid;fhi=fm;}else{lo=mid;flo=fm;}
+  }
+  return (lo+hi)/2;
+}
+document.getElementById('calculate').addEventListener('click',()=>{
+  const premium=Number(document.getElementById('premium').value);
+  const payments=Number(document.getElementById('payments').value);
+  const start=Number(document.getElementById('start').value);
+  const freq=Number(document.getElementById('frequency').value);
+  const benefitRows=[...benefitsEl.querySelectorAll('.row')];
+  if(!(premium>0) || !(payments>=1) || !Number.isInteger(payments) || payments>100){
+    alert('Enter a premium greater than zero and a whole number of payments between 1 and 100.'); return;
+  }
+  const benefits=benefitRows.map(r=>({year:Number(r.querySelector('.benefit-year').value),amount:Number(r.querySelector('.benefit-amount').value)}));
+  if(benefits.some(b=>!Number.isFinite(b.year)||b.year<0||!Number.isInteger(b.year)||!Number.isFinite(b.amount)||b.amount<0)){
+    alert('Check each benefit year and amount. Years must be whole numbers and amounts cannot be negative.'); return;
+  }
+  const incomeRows=[...incomeStreamsEl.querySelectorAll('.income-row')];
+  const incomes=incomeRows.map(r=>({from:Number(r.querySelector('.income-from').value),to:Number(r.querySelector('.income-to').value),amount:Number(r.querySelector('.income-amount').value)}));
+  if(incomes.some(x=>!Number.isInteger(x.from)||!Number.isInteger(x.to)||x.from<0||x.to<x.from||x.to>100||!Number.isFinite(x.amount)||x.amount<0)){
+    alert('Check recurring income periods: years must be whole numbers, To year must be at least From year, and amounts cannot be negative.'); return;
+  }
+  const maxYear=Math.max(0,...benefits.map(b=>b.year),...incomes.map(x=>x.to),Math.ceil(start+(payments-1)*freq));
+  const flows=Array(maxYear+1).fill(0);
+  const premiumByYear=Array(maxYear+1).fill(0);
+  const benefitByYear=Array(maxYear+1).fill(0);
+  for(let i=0;i<payments;i++){
+    const t=Math.round(start+i*freq);
+    flows[t]-=premium;
+    premiumByYear[t]+=premium;
+  }
+  benefits.forEach(b=>{flows[b.year]+=b.amount; benefitByYear[b.year]+=b.amount;});
+  incomes.forEach(x=>{for(let y=x.from;y<=x.to;y++){flows[y]+=x.amount; benefitByYear[y]+=x.amount;}});
+  const irr=calculateIRR(flows);
+  let totalPremium=premium*payments, totalBenefits=benefitByYear.reduce((s,b)=>s+b,0);
+  let html='<div class="result"><div class="muted">Estimated annual IRR</div>';
+  html+=irr===null?'<div class="big">Not available</div><p class="note">The entered cash flows do not produce a single calculable IRR. Check that premiums are negative cash flows and benefits are positive.</p>':
+    `<div class="big">${(irr*100).toFixed(2)}%</div><div class="muted">Annualized rate based on yearly cash-flow periods</div>`;
+  html+=`<div class="grid" style="margin-top:14px"><div><div class="muted">Total premiums</div><b>${money(totalPremium)}</b></div><div><div class="muted">Total benefits</div><b>${money(totalBenefits)}</b></div><div><div class="muted">Net gain / (shortfall)</div><b>${money(totalBenefits-totalPremium)}</b></div><div><div class="muted">Benefit-to-premium ratio</div><b>${totalPremium?((totalBenefits/totalPremium).toFixed(2)+'×'):'—'}</b></div></div></div>`;
+  html+='<section class="card"><h2>Cash-flow details</h2><div class="table-wrap"><table><thead><tr><th>Policy year</th><th>Premium outflow</th><th>Benefit inflow</th><th>Net cash flow</th></tr></thead><tbody>';
+  for(let y=0;y<flows.length;y++){
+    const premiumOut=premiumByYear[y];
+    const incoming=benefitByYear[y];
+    if(premiumOut||incoming||y===0) html+=`<tr><td>${y}</td><td>${money(premiumOut)}</td><td>${money(incoming)}</td><td>${money(flows[y])}</td></tr>`;
+  }
+  html+='</tbody></table></div><p class="note">Year 0 means today. Benefits are combined if multiple payments occur in the same year. This calculation assumes annual compounding between policy years.</p></section>';
+  document.getElementById('output').innerHTML=html;
+});
+</script>
+</body>
+</html>
